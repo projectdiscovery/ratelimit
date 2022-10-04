@@ -1,2 +1,3 @@
 # ratelimit
-A Golang blocking rate limit implementation
+
+A Golang rate limit implementation
