@@ -8,8 +8,8 @@ import (
 
 // Limiter allows a burst of request during the defined duration
 type Limiter struct {
-	maxCount int64
-	count    int64
+	maxCount uint
+	count    uint
 	ticker   *time.Ticker
 	tokens   chan struct{}
 	ctx      context.Context
@@ -17,7 +17,7 @@ type Limiter struct {
 
 func (limiter *Limiter) run() {
 	for {
-		if limiter.count <= 0 {
+		if limiter.count == 0 {
 			<-limiter.ticker.C
 			limiter.count = limiter.maxCount
 		}
@@ -40,10 +40,10 @@ func (rateLimiter *Limiter) Take() {
 }
 
 // New creates a new limiter instance with the tokens amount and the interval
-func New(ctx context.Context, max int64, duration time.Duration) *Limiter {
+func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	limiter := &Limiter{
-		maxCount: max,
-		count:    max,
+		maxCount: uint(max),
+		count:    uint(max),
 		ticker:   time.NewTicker(duration),
 		tokens:   make(chan struct{}),
 		ctx:      ctx,
@@ -56,8 +56,8 @@ func New(ctx context.Context, max int64, duration time.Duration) *Limiter {
 // NewUnlimited create a bucket with approximated unlimited tokens
 func NewUnlimited(ctx context.Context) *Limiter {
 	limiter := &Limiter{
-		maxCount: math.MaxInt64,
-		count:    math.MaxInt64,
+		maxCount: math.MaxUint,
+		count:    math.MaxUint,
 		ticker:   time.NewTicker(time.Millisecond),
 		tokens:   make(chan struct{}),
 		ctx:      ctx,
