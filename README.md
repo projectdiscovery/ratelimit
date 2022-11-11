@@ -4,7 +4,7 @@
 ![Go version](https://img.shields.io/github/go-mod/go-version/projectdiscovery/ratelimit?filename=go.mod)
 [![Release](https://img.shields.io/github/release/projectdiscovery/ratelimit)](https://github.com/projectdiscovery/ratelimit/releases/)
 [![Checks](https://github.com/projectdiscovery/ratelimit/actions/workflows/build-test.yml/badge.svg)](https://github.com/projectdiscovery/ratelimit/actions/workflows/build-test.yml)
-[![GoDoc](https://pkg.go.dev/badge/projectdiscovery/ratelimit)](https://pkg.go.dev/projectdiscovery/ratelimit)
+[![GoDoc](https://pkg.go.dev/badge/projectdiscovery/ratelimit)](https://pkg.go.dev/github.com/projectdiscovery/ratelimit)
 
 A Golang rate limit implementation which allows burst of request during the defined duration.
 
