@@ -10,7 +10,7 @@ A Golang rate limit implementation which allows burst of request during the defi
 
 ## Example
 
-An Example showing usage of ratelimit as a library is specified below.
+An Example showing usage of ratelimit as a library is specified below:
 
 ```go
 package main
@@ -50,5 +50,4 @@ func main() {
 		Task 9 completed after 10.001548666s
 	*/
 }
-
 ```
