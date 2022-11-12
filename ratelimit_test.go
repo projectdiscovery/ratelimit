@@ -2,6 +2,8 @@ package ratelimit
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,5 +42,34 @@ func TestRateLimit(t *testing.T) {
 		took := time.Since(start)
 		require.Equal(t, count, 1000)
 		require.True(t, took < time.Duration(1*time.Second))
+	})
+
+	t.Run("Concurrent Rate Limit Use", func(t *testing.T) {
+		limiter := New(context.Background(), 20, time.Duration(10*time.Second))
+		require.NotNil(t, limiter)
+		var count int32
+		expected := 40
+		start := time.Now()
+		var wg sync.WaitGroup
+		// expected
+		// - First burst of 20 go routines at 0 seconds
+		// - Second burst of 20 go routines at 10 seconds
+		// - Everything should complete right after 10 seconds
+		for i := 0; i < expected; i++ {
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+
+				limiter.Take()
+				atomic.AddInt32(&count, 1)
+			}()
+		}
+
+		wg.Wait()
+		took := time.Since(start)
+		require.Equal(t, expected, int(count))
+		require.True(t, took >= time.Duration(10*time.Second))
+		require.True(t, took <= time.Duration(12*time.Second))
 	})
 }
