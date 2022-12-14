@@ -8,6 +8,13 @@
 
 A Golang rate limit implementation which allows burst of request during the defined duration.
 
+
+### Differences with 'golang.org/x/time/rate#Limiter'
+
+The original library i.e `golang.org/x/time/rate` implements classic **token bucket** algorithm allowing a burst of tokens and a refill that happens at a specified ratio by one unit at a time whereas this implementation is a variant  that allows a burst of tokens just like "the token bucket" algorithm, but the refill happens entirely at the defined ratio.
+
+This allows scanners to respect maximum defined rate limits, pause until the allowed interval hits, and then process again at maximum speed. The original library slowed down requests according to the refill ratio.
+
 ## Example
 
 An Example showing usage of ratelimit as a library is specified below:

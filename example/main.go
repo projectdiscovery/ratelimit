@@ -9,20 +9,6 @@ import (
 )
 
 func main() {
-
-	fmt.Printf("[+] Complete Tasks Using MulitLimiter with unique key\n")
-
-	multiLimiter := ratelimit.NewMultiLimiter(context.Background())
-	multiLimiter.Add("default", 10)
-	save1 := time.Now()
-
-	for i := 0; i < 11; i++ {
-		multiLimiter.Take("default")
-		fmt.Printf("MulitKey Task %v completed after %v\n", i, time.Since(save1))
-	}
-
-	fmt.Printf("\n[+] Complete Tasks Using Limiter\n")
-
 	// create a rate limiter by passing context, max tasks/tokens , time interval
 	limiter := ratelimit.New(context.Background(), 5, time.Duration(10*time.Second))
 

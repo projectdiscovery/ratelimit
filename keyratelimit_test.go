@@ -2,6 +2,7 @@ package ratelimit_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,21 +11,43 @@ import (
 )
 
 func TestMultiLimiter(t *testing.T) {
-	limiter := ratelimit.NewMultiLimiter(context.Background())
+	limiter, err := ratelimit.NewMultiLimiter(context.Background(), &ratelimit.Options{
+		Key:         "default",
+		IsUnlimited: false,
+		MaxCount:    100,
+		Duration:    time.Duration(3) * time.Second,
+	})
+	require.Nil(t, err)
+	wg := &sync.WaitGroup{}
 
-	// 20 tokens every 1 minute
-	err := limiter.Add("default", 20)
-	require.Nil(t, err, "failed to add new key")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defaultStart := time.Now()
+		for i := 0; i < 201; i++ {
+			errx := limiter.Take("default")
+			require.Nil(t, errx, "failed to take")
+		}
+		require.Greater(t, time.Since(defaultStart), time.Duration(6)*time.Second)
+	}()
 
-	before := time.Now()
-	// take 21 tokens
-	for i := 0; i < 21; i++ {
-		err2 := limiter.Take("default")
-		require.Nil(t, err2, "failed to take")
-	}
-	actual := time.Since(before)
-	expected := time.Duration(time.Minute)
+	err = limiter.Add(&ratelimit.Options{
+		Key:         "one",
+		IsUnlimited: false,
+		MaxCount:    100,
+		Duration:    time.Duration(3) * time.Second,
+	})
+	require.Nil(t, err)
 
-	require.Greater(t, actual, expected)
-
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		oneStart := time.Now()
+		for i := 0; i < 201; i++ {
+			errx := limiter.Take("one")
+			require.Nil(t, errx)
+		}
+		require.Greater(t, time.Since(oneStart), time.Duration(6)*time.Second)
+	}()
+	wg.Wait()
 }
