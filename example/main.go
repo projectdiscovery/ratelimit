@@ -9,7 +9,6 @@ import (
 )
 
 func main() {
-
 	// create a rate limiter by passing context, max tasks/tokens , time interval
 	limiter := ratelimit.New(context.Background(), 5, time.Duration(10*time.Second))
 
