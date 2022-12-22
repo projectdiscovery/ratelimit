@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"golang.org/x/exp/maps"
 )
 
 // Options of MultiLimiter
@@ -72,6 +74,24 @@ func (m *MultiLimiter) Take(key string) error {
 	}
 	limiter.Take()
 	return nil
+}
+
+// Stop internal limiters with defined keys or all if no key is provided
+func (m *MultiLimiter) Stop(keys ...string) {
+	if len(keys) > 0 {
+		m.stopWithKeys(keys...)
+	} else {
+		m.stopWithKeys(maps.Keys(m.limiters))
+	}
+}
+
+// stopWithKeys stops the internal limiters matching keys
+func (m *MultiLimiter) stopWithKeys(keys ...string) {
+	for _, key := range keys {
+		if limiter, ok := m.limiters[key]; ok {
+			limiter.Stop()
+		}
+	}
 }
 
 // SleepandReset stops timer removes all tokens and resets with new limit (used for Adaptive Ratelimiting)
