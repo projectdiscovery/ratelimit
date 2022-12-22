@@ -68,6 +68,13 @@ func (ratelimiter *Limiter) SleepandReset(sleepTime time.Duration, newLimit uint
 	go ratelimiter.run(ctx)
 }
 
+// Stop the rate limiter canceling the internal context
+func (ratelimiter *Limiter) Stop() {
+	if ratelimiter.cancelFunc != nil {
+		ratelimiter.cancelFunc()
+	}
+}
+
 // New creates a new limiter instance with the tokens amount and the interval
 func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
