@@ -81,7 +81,7 @@ func (m *MultiLimiter) Stop(keys ...string) {
 	if len(keys) > 0 {
 		m.stopWithKeys(keys...)
 	} else {
-		m.stopWithKeys(maps.Keys(m.limiters))
+		m.stopWithKeys(maps.Keys(m.limiters)...)
 	}
 }
 
