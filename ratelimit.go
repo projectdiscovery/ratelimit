@@ -70,6 +70,7 @@ func (ratelimiter *Limiter) SleepandReset(sleepTime time.Duration, newLimit uint
 
 // Stop the rate limiter canceling the internal context
 func (ratelimiter *Limiter) Stop() {
+	defer close(ratelimiter.tokens)
 	if ratelimiter.cancelFunc != nil {
 		ratelimiter.cancelFunc()
 	}
