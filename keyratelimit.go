@@ -3,9 +3,8 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
-
-	"golang.org/x/exp/maps"
 )
 
 // Options of MultiLimiter
@@ -33,88 +32,94 @@ func (o *Options) Validate() error {
 }
 
 // MultiLimiter is wrapper around Limiter than can limit based on a key
+// If Invalid keys or options are given then Multilimiter just skips it (similar to sync.Map)
 type MultiLimiter struct {
-	limiters map[string]*Limiter
+	limiters sync.Map
 	ctx      context.Context
 }
 
 // Adds new bucket with key
-func (m *MultiLimiter) Add(opts *Options) error {
-	if err := opts.Validate(); err != nil {
-		return err
-	}
-	_, ok := m.limiters[opts.Key]
-	if ok {
-		return fmt.Errorf("key already exists")
-	}
+func (m *MultiLimiter) Add(opts *Options) bool {
 	var rlimiter *Limiter
 	if opts.IsUnlimited {
 		rlimiter = NewUnlimited(m.ctx)
 	} else {
 		rlimiter = New(m.ctx, opts.MaxCount, opts.Duration)
 	}
-	m.limiters[opts.Key] = rlimiter
-	return nil
+
+	_, ok := m.limiters.LoadOrStore(opts.Key, rlimiter)
+	return ok
 }
 
 // GetLimit returns current ratelimit of given key
-func (m *MultiLimiter) GetLimit(key string) (uint, error) {
-	limiter, ok := m.limiters[key]
-	if !ok || limiter == nil {
-		return 0, fmt.Errorf("key doesnot exist")
+func (m *MultiLimiter) GetLimit(key string) uint {
+	if limiter, ok := m.limiters.Load(key); ok {
+		rl := (limiter).(*Limiter)
+		return rl.GetLimit()
 	}
-	return limiter.GetLimit(), nil
+	return 0
 }
 
 // Take one token from bucket returns error if key not present
-func (m *MultiLimiter) Take(key string) error {
-	limiter, ok := m.limiters[key]
-	if !ok || limiter == nil {
-		return fmt.Errorf("key doesnot exist")
+func (m *MultiLimiter) Take(key string) bool {
+	limiter, ok := m.limiters.Load(key)
+	rl := (limiter).(*Limiter)
+	if ok {
+		rl.Take()
+		return true
 	}
-	limiter.Take()
-	return nil
+	return false
+}
+
+// TakeNCreate creates multilimiter if not exists
+func (m *MultiLimiter) TakeNCreate(opts *Options) {
+	var rlimiter *Limiter
+	if opts.IsUnlimited {
+		rlimiter = NewUnlimited(m.ctx)
+	} else {
+		rlimiter = New(m.ctx, opts.MaxCount, opts.Duration)
+	}
+
+	limiter, _ := m.limiters.LoadOrStore(opts.Key, rlimiter)
+	rl := (limiter).(*Limiter)
+	rl.Take()
 }
 
 // Stop internal limiters with defined keys or all if no key is provided
 func (m *MultiLimiter) Stop(keys ...string) {
-	if len(keys) > 0 {
-		m.stopWithKeys(keys...)
-	} else {
-		m.stopWithKeys(maps.Keys(m.limiters)...)
+	if len(keys) == 0 {
+		m.limiters.Range(func(key, value any) bool {
+			keys = append(keys, key.(string))
+			return true
+		})
 	}
-}
-
-// stopWithKeys stops the internal limiters matching keys
-func (m *MultiLimiter) stopWithKeys(keys ...string) {
-	for _, key := range keys {
-		if limiter, ok := m.limiters[key]; ok {
-			limiter.Stop()
-		}
+	for _, v := range keys {
+		m.limiters.Delete(v)
 	}
 }
 
 // SleepandReset stops timer removes all tokens and resets with new limit (used for Adaptive Ratelimiting)
-func (m *MultiLimiter) SleepandReset(SleepTime time.Duration, opts *Options) error {
+func (m *MultiLimiter) SleepandReset(SleepTime time.Duration, opts *Options) bool {
 	if err := opts.Validate(); err != nil {
-		return err
+		return false
 	}
-	limiter, ok := m.limiters[opts.Key]
+	limiter, ok := m.limiters.Load(opts.Key)
 	if !ok || limiter == nil {
-		return fmt.Errorf("key doesnot exist")
+		return false
 	}
-	limiter.SleepandReset(SleepTime, opts.MaxCount, opts.Duration)
-	return nil
+	rl := limiter.(*Limiter)
+	rl.SleepandReset(SleepTime, opts.MaxCount, opts.Duration)
+	return true
 }
 
 // NewMultiLimiter : Limits
-func NewMultiLimiter(ctx context.Context, opts *Options) (*MultiLimiter, error) {
+func NewMultiLimiter(ctx context.Context, opts *Options) *MultiLimiter {
 	if err := opts.Validate(); err != nil {
-		return nil, err
+		return nil
 	}
 	multilimiter := &MultiLimiter{
 		ctx:      ctx,
-		limiters: map[string]*Limiter{},
+		limiters: sync.Map{},
 	}
-	return multilimiter, multilimiter.Add(opts)
+	return multilimiter
 }

@@ -11,13 +11,13 @@ import (
 )
 
 func TestMultiLimiter(t *testing.T) {
-	limiter, err := ratelimit.NewMultiLimiter(context.Background(), &ratelimit.Options{
+	limiter := ratelimit.NewMultiLimiter(context.Background(), &ratelimit.Options{
 		Key:         "default",
 		IsUnlimited: false,
 		MaxCount:    100,
 		Duration:    time.Duration(3) * time.Second,
 	})
-	require.Nil(t, err)
+	require.NotNil(t, limiter)
 	wg := &sync.WaitGroup{}
 
 	wg.Add(1)
@@ -25,27 +25,24 @@ func TestMultiLimiter(t *testing.T) {
 		defer wg.Done()
 		defaultStart := time.Now()
 		for i := 0; i < 201; i++ {
-			errx := limiter.Take("default")
-			require.Nil(t, errx, "failed to take")
+			limiter.Take("default")
 		}
 		require.Greater(t, time.Since(defaultStart), time.Duration(6)*time.Second)
 	}()
 
-	err = limiter.Add(&ratelimit.Options{
+	limiter.Add(&ratelimit.Options{
 		Key:         "one",
 		IsUnlimited: false,
 		MaxCount:    100,
 		Duration:    time.Duration(3) * time.Second,
 	})
-	require.Nil(t, err)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		oneStart := time.Now()
 		for i := 0; i < 201; i++ {
-			errx := limiter.Take("one")
-			require.Nil(t, errx)
+			limiter.Take("one")
 		}
 		require.Greater(t, time.Since(oneStart), time.Duration(6)*time.Second)
 	}()
