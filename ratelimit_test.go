@@ -67,6 +67,7 @@ func TestRateLimit(t *testing.T) {
 		}
 
 		wg.Wait()
+		limiter.Stop()
 		took := time.Since(start)
 		require.Equal(t, expected, int(count))
 		require.True(t, took >= time.Duration(10*time.Second))
