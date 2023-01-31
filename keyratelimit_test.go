@@ -24,11 +24,13 @@ func TestMultiLimiter(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		defaultStart := time.Now()
-		for i := 0; i < 202; i++ {
+		for i := 0; i < 201; i++ {
 			errx := limiter.Take("default")
 			require.Nil(t, errx, "failed to take")
 		}
-		require.Greater(t, time.Since(defaultStart).Nanoseconds(), (time.Duration(6) * time.Second).Nanoseconds())
+		timeTaken := time.Since(defaultStart)
+		expectedTime := time.Duration(6) * time.Second
+		require.GreaterOrEqualf(t, timeTaken.Nanoseconds(), expectedTime.Nanoseconds(), "more token sent than requested in given timeframe")
 	}()
 
 	err = limiter.Add(&ratelimit.Options{
@@ -43,11 +45,13 @@ func TestMultiLimiter(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		oneStart := time.Now()
-		for i := 0; i < 202; i++ {
+		for i := 0; i < 201; i++ {
 			errx := limiter.Take("one")
 			require.Nil(t, errx)
 		}
-		require.Greater(t, time.Since(oneStart).Nanoseconds(), (time.Duration(6) * time.Second).Nanoseconds())
+		timeTaken := time.Since(oneStart)
+		expectedTime := time.Duration(6) * time.Second
+		require.GreaterOrEqualf(t, timeTaken.Nanoseconds(), expectedTime.Nanoseconds(), "more token sent than requested in given timeframe")
 	}()
 	wg.Wait()
 }

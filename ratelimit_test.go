@@ -73,4 +73,16 @@ func TestRateLimit(t *testing.T) {
 		require.True(t, took >= time.Duration(10*time.Second))
 		require.True(t, took <= time.Duration(12*time.Second))
 	})
+
+	t.Run("Time comparsion", func(t *testing.T) {
+		limiter := New(context.TODO(), 100, time.Duration(3)*time.Second)
+		// if ratelimit works correctly it should take at least 6 sec to take/consume 201 tokens
+		startTime := time.Now()
+		for i := 0; i < 201; i++ {
+			limiter.Take()
+		}
+		timetaken := time.Since(startTime)
+		expected := time.Duration(6) * time.Second
+		require.GreaterOrEqualf(t, timetaken.Nanoseconds(), expected.Nanoseconds(), "more tokens sent than expected with ratelimit")
+	})
 }
