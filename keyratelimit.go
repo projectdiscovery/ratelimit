@@ -81,8 +81,8 @@ func (m *MultiLimiter) AddAndTake(opts *Options) {
 		limiter.Take()
 		return
 	}
-	m.Add(opts)
-	m.Take(opts.Key)
+	_ = m.Add(opts)
+	_ = m.Take(opts.Key)
 }
 
 // Stop internal limiters with defined keys or all if no key is provided
