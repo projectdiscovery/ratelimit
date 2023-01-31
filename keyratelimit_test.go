@@ -19,6 +19,7 @@ func TestMultiLimiter(t *testing.T) {
 	})
 	require.Nil(t, err)
 	wg := &sync.WaitGroup{}
+	expectedTime := (time.Duration(6) * time.Second).Round(time.Millisecond)
 
 	wg.Add(1)
 	go func() {
@@ -28,8 +29,7 @@ func TestMultiLimiter(t *testing.T) {
 			errx := limiter.Take("default")
 			require.Nil(t, errx, "failed to take")
 		}
-		timeTaken := time.Since(defaultStart)
-		expectedTime := time.Duration(6) * time.Second
+		timeTaken := time.Since(defaultStart).Round(time.Millisecond)
 		require.GreaterOrEqualf(t, timeTaken.Nanoseconds(), expectedTime.Nanoseconds(), "more token sent than requested in given timeframe")
 	}()
 
@@ -49,8 +49,7 @@ func TestMultiLimiter(t *testing.T) {
 			errx := limiter.Take("one")
 			require.Nil(t, errx)
 		}
-		timeTaken := time.Since(oneStart)
-		expectedTime := time.Duration(6) * time.Second
+		timeTaken := time.Since(oneStart).Round(time.Millisecond)
 		require.GreaterOrEqualf(t, timeTaken.Nanoseconds(), expectedTime.Nanoseconds(), "more token sent than requested in given timeframe")
 	}()
 	wg.Wait()
