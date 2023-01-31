@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Test
-        run: go test ./...
+        run: go test -race ./...
 
       - name: Build Example
         run: go build example/main.go

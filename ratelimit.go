@@ -18,6 +18,7 @@ type Limiter struct {
 }
 
 func (limiter *Limiter) run(ctx context.Context) {
+	defer close(limiter.tokens)
 	for {
 		if limiter.count == 0 {
 			<-limiter.ticker.C
@@ -49,28 +50,29 @@ func (ratelimiter *Limiter) GetLimit() uint {
 	return ratelimiter.maxCount
 }
 
-// SleepandReset stops timer removes all tokens and resets with new limit (used for Adaptive Ratelimiting)
-func (ratelimiter *Limiter) SleepandReset(sleepTime time.Duration, newLimit uint, duration time.Duration) {
-	// stop existing Limiter using internalContext
-	ratelimiter.cancelFunc()
-	// drain any token
-	close(ratelimiter.tokens)
-	<-ratelimiter.tokens
-	// sleep
-	time.Sleep(sleepTime)
-	//reset and start
-	ratelimiter.maxCount = newLimit
-	ratelimiter.count = newLimit
-	ratelimiter.ticker = time.NewTicker(duration)
-	ratelimiter.tokens = make(chan struct{})
-	ctx, cancel := context.WithCancel(context.TODO())
-	ratelimiter.cancelFunc = cancel
-	go ratelimiter.run(ctx)
-}
+// TODO: SleepandReset should be able to handle multiple calls without resetting multiple times
+// Which is not possible in this implementation
+// // SleepandReset stops timer removes all tokens and resets with new limit (used for Adaptive Ratelimiting)
+// func (ratelimiter *Limiter) SleepandReset(sleepTime time.Duration, newLimit uint, duration time.Duration) {
+// 	// stop existing Limiter using internalContext
+// 	ratelimiter.cancelFunc()
+// 	// drain any token
+// 	close(ratelimiter.tokens)
+// 	<-ratelimiter.tokens
+// 	// sleep
+// 	time.Sleep(sleepTime)
+// 	//reset and start
+// 	ratelimiter.maxCount = newLimit
+// 	ratelimiter.count = newLimit
+// 	ratelimiter.ticker = time.NewTicker(duration)
+// 	ratelimiter.tokens = make(chan struct{})
+// 	ctx, cancel := context.WithCancel(context.TODO())
+// 	ratelimiter.cancelFunc = cancel
+// 	go ratelimiter.run(ctx)
+// }
 
 // Stop the rate limiter canceling the internal context
 func (ratelimiter *Limiter) Stop() {
-	defer close(ratelimiter.tokens)
 	if ratelimiter.cancelFunc != nil {
 		ratelimiter.cancelFunc()
 	}
