@@ -2,9 +2,15 @@ package ratelimit
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
+
+	errorutil "github.com/projectdiscovery/utils/errors"
+)
+
+var (
+	ErrKeyAlreadyExists = errorutil.NewWithTag("MultiLimiter", "key already exists")
+	ErrKeyMissing       = errorutil.NewWithTag("MultiLimiter", "key does not exist")
 )
 
 // Options of MultiLimiter
@@ -19,13 +25,13 @@ type Options struct {
 func (o *Options) Validate() error {
 	if !o.IsUnlimited {
 		if o.Key == "" {
-			return fmt.Errorf("empty keys not allowed")
+			return errorutil.NewWithTag("MultiLimiter", "empty keys not allowed")
 		}
 		if o.MaxCount == 0 {
-			return fmt.Errorf("maxcount cannot be zero")
+			return errorutil.NewWithTag("MultiLimiter", "maxcount cannot be zero")
 		}
 		if o.Duration == 0 {
-			return fmt.Errorf("time duration not set")
+			return errorutil.NewWithTag("MultiLimiter", "time duration not set")
 		}
 	}
 	return nil
@@ -51,7 +57,7 @@ func (m *MultiLimiter) Add(opts *Options) error {
 	// ok if true if key already exists
 	_, ok := m.limiters.LoadOrStore(opts.Key, rlimiter)
 	if ok {
-		return fmt.Errorf("key already exists")
+		return ErrKeyAlreadyExists.Msgf("key: %v", opts.Key)
 	}
 	return nil
 }
@@ -89,7 +95,9 @@ func (m *MultiLimiter) AddAndTake(opts *Options) {
 func (m *MultiLimiter) Stop(keys ...string) {
 	if len(keys) == 0 {
 		m.limiters.Range(func(key, value any) bool {
-			value.(*Limiter).Stop()
+			if limiter, ok := value.(*Limiter); ok {
+				limiter.Stop()
+			}
 			return true
 		})
 		return
@@ -105,9 +113,12 @@ func (m *MultiLimiter) Stop(keys ...string) {
 func (m *MultiLimiter) get(key string) (*Limiter, error) {
 	val, _ := m.limiters.Load(key)
 	if val == nil {
-		return nil, fmt.Errorf("multilimiter: key does not exist")
+		return nil, ErrKeyMissing.Msgf("key: %v", key)
 	}
-	return val.(*Limiter), nil
+	if limiter, ok := val.(*Limiter); ok {
+		return limiter, nil
+	}
+	return nil, errorutil.NewWithTag("MultiLimiter", "type assertion of rateLimiter failed in multiLimiter")
 }
 
 // NewMultiLimiter : Limits
