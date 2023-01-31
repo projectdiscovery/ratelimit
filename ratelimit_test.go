@@ -21,13 +21,13 @@ func TestRateLimit(t *testing.T) {
 			limiter.Take()
 			count++
 		}
-		took := time.Since(start)
+		took := time.Since(start).Nanoseconds()
 		require.Equal(t, count, 10)
-		require.True(t, took < expected)
+		require.Less(t, took, expected.Nanoseconds())
 		// take another one above max
 		limiter.Take()
-		took = time.Since(start)
-		require.True(t, took >= expected)
+		took = time.Since(start).Nanoseconds()
+		require.GreaterOrEqual(t, took, expected.Nanoseconds())
 	})
 
 	t.Run("Unlimited Rate Limit", func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestRateLimit(t *testing.T) {
 		}
 		took := time.Since(start)
 		require.Equal(t, count, 1000)
-		require.True(t, took < time.Duration(1*time.Second))
+		require.Lessf(t, took.Nanoseconds(), time.Duration(1*time.Second).Nanoseconds(), "burst rate of unlimited ratelimit is too low")
 	})
 
 	t.Run("Concurrent Rate Limit Use", func(t *testing.T) {
@@ -70,8 +70,8 @@ func TestRateLimit(t *testing.T) {
 		limiter.Stop()
 		took := time.Since(start)
 		require.Equal(t, expected, int(count))
-		require.True(t, took >= time.Duration(10*time.Second))
-		require.True(t, took <= time.Duration(12*time.Second))
+		require.GreaterOrEqualf(t, took, time.Duration(10*time.Second).Nanoseconds(), "ratelimit timeframe mismatch should be > 10s")
+		require.LessOrEqualf(t, took, time.Duration(12*time.Second).Nanoseconds(), "ratelimit timeframe mismatch should be < 10s")
 	})
 
 	t.Run("Time comparsion", func(t *testing.T) {
