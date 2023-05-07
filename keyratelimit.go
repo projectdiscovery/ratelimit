@@ -43,7 +43,7 @@ type MultiLimiter struct {
 	ctx      context.Context
 }
 
-// Adds new bucket with key
+// Add new bucket with key
 func (m *MultiLimiter) Add(opts *Options) error {
 	if err := opts.Validate(); err != nil {
 		return err
@@ -54,7 +54,7 @@ func (m *MultiLimiter) Add(opts *Options) error {
 	} else {
 		rlimiter = New(m.ctx, opts.MaxCount, opts.Duration)
 	}
-	// ok if true if key already exists
+	// ok is true if key already exists
 	_, ok := m.limiters.LoadOrStore(opts.Key, rlimiter)
 	if ok {
 		return ErrKeyAlreadyExists.Msgf("key: %v", opts.Key)
