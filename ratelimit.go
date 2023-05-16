@@ -3,13 +3,17 @@ package ratelimit
 import (
 	"context"
 	"math"
+	"sync/atomic"
 	"time"
 )
 
+// equals to -1
+var minusOne = ^uint32(0)
+
 // Limiter allows a burst of request during the defined duration
 type Limiter struct {
-	maxCount uint
-	count    uint
+	maxCount uint32
+	count    atomic.Uint32
 	ticker   *time.Ticker
 	tokens   chan struct{}
 	ctx      context.Context
@@ -20,9 +24,9 @@ type Limiter struct {
 func (limiter *Limiter) run(ctx context.Context) {
 	defer close(limiter.tokens)
 	for {
-		if limiter.count == 0 {
+		if limiter.count.Load() == 0 {
 			<-limiter.ticker.C
-			limiter.count = limiter.maxCount
+			limiter.count.Store(limiter.maxCount)
 		}
 		select {
 		case <-ctx.Done():
@@ -33,21 +37,21 @@ func (limiter *Limiter) run(ctx context.Context) {
 			limiter.ticker.Stop()
 			return
 		case limiter.tokens <- struct{}{}:
-			limiter.count--
+			limiter.count.Add(minusOne)
 		case <-limiter.ticker.C:
-			limiter.count = limiter.maxCount
+			limiter.count.Store(limiter.maxCount)
 		}
 	}
 }
 
 // Take one token from the bucket
-func (rateLimiter *Limiter) Take() {
-	<-rateLimiter.tokens
+func (limiter *Limiter) Take() {
+	<-limiter.tokens
 }
 
 // GetLimit returns current rate limit per given duration
-func (ratelimiter *Limiter) GetLimit() uint {
-	return ratelimiter.maxCount
+func (limiter *Limiter) GetLimit() uint {
+	return uint(limiter.maxCount)
 }
 
 // TODO: SleepandReset should be able to handle multiple calls without resetting multiple times
@@ -72,9 +76,9 @@ func (ratelimiter *Limiter) GetLimit() uint {
 // }
 
 // Stop the rate limiter canceling the internal context
-func (ratelimiter *Limiter) Stop() {
-	if ratelimiter.cancelFunc != nil {
-		ratelimiter.cancelFunc()
+func (limiter *Limiter) Stop() {
+	if limiter.cancelFunc != nil {
+		limiter.cancelFunc()
 	}
 }
 
@@ -83,13 +87,13 @@ func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
 
 	limiter := &Limiter{
-		maxCount:   uint(max),
-		count:      uint(max),
+		maxCount:   uint32(max),
 		ticker:     time.NewTicker(duration),
 		tokens:     make(chan struct{}),
 		ctx:        ctx,
 		cancelFunc: cancel,
 	}
+	limiter.count.Store(uint32(max))
 	go limiter.run(internalctx)
 
 	return limiter
@@ -100,13 +104,13 @@ func NewUnlimited(ctx context.Context) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
 
 	limiter := &Limiter{
-		maxCount:   math.MaxUint,
-		count:      math.MaxUint,
+		maxCount:   math.MaxUint32,
 		ticker:     time.NewTicker(time.Millisecond),
 		tokens:     make(chan struct{}),
 		ctx:        ctx,
 		cancelFunc: cancel,
 	}
+	limiter.count.Store(math.MaxUint32)
 	go limiter.run(internalctx)
 
 	return limiter
