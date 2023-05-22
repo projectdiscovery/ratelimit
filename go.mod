@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/projectdiscovery/utils v0.0.30
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.8.3
 )
 
 require (
