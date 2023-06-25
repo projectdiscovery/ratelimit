@@ -81,6 +81,14 @@ func (m *MultiLimiter) Take(key string) error {
 	return nil
 }
 
+func (m *MultiLimiter) CanTake(key string) bool {
+	limiter, err := m.get(key)
+	if err != nil {
+		return false
+	}
+	return limiter.CanTake()
+}
+
 // AddAndTake adds key if not present and then takes token from bucket
 func (m *MultiLimiter) AddAndTake(opts *Options) {
 	if limiter, err := m.get(opts.Key); err == nil {
