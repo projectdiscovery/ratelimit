@@ -49,6 +49,11 @@ func (limiter *Limiter) Take() {
 	<-limiter.tokens
 }
 
+// Take one token from the bucket
+func (limiter *Limiter) CanTake() bool {
+	return limiter.count.Load() > 0
+}
+
 // GetLimit returns current rate limit per given duration
 func (limiter *Limiter) GetLimit() uint {
 	return uint(limiter.maxCount)
