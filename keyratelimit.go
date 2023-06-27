@@ -81,7 +81,7 @@ func (m *MultiLimiter) Take(key string) error {
 	return nil
 }
 
-// CanTake
+// CanTake checks if the rate limiter with the given key has any token
 func (m *MultiLimiter) CanTake(key string) bool {
 	limiter, err := m.get(key)
 	if err != nil {
