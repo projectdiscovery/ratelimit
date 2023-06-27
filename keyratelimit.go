@@ -81,6 +81,7 @@ func (m *MultiLimiter) Take(key string) error {
 	return nil
 }
 
+// CanTake
 func (m *MultiLimiter) CanTake(key string) bool {
 	limiter, err := m.get(key)
 	if err != nil {

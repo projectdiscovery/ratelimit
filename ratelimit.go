@@ -49,7 +49,7 @@ func (limiter *Limiter) Take() {
 	<-limiter.tokens
 }
 
-// Take one token from the bucket
+// CanTake checks if the rate limiter has any token
 func (limiter *Limiter) CanTake() bool {
 	return limiter.count.Load() > 0
 }
