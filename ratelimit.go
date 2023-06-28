@@ -49,6 +49,11 @@ func (limiter *Limiter) Take() {
 	<-limiter.tokens
 }
 
+// CanTake checks if the rate limiter has any token
+func (limiter *Limiter) CanTake() bool {
+	return limiter.count.Load() > 0
+}
+
 // GetLimit returns current rate limit per given duration
 func (limiter *Limiter) GetLimit() uint {
 	return uint(limiter.maxCount)

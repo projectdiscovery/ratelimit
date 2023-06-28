@@ -85,4 +85,14 @@ func TestRateLimit(t *testing.T) {
 		expected := time.Duration(6) * time.Second
 		require.GreaterOrEqualf(t, timetaken.Nanoseconds(), expected.Nanoseconds(), "more tokens sent than expected with ratelimit")
 	})
+
+	t.Run("Test Take and CanTake", func(t *testing.T) {
+		limiter := New(context.TODO(), 3, time.Hour)
+
+		require.True(t, limiter.CanTake())
+		limiter.Take()
+		limiter.Take()
+		limiter.Take()
+		require.False(t, limiter.CanTake())
+	})
 }
