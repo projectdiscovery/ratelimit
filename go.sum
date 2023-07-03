@@ -2,8 +2,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
-github.com/projectdiscovery/utils v0.0.39 h1:iyi5qPilENRmFyt16qtd58pb65fUu0wAU2C0Lq5t6zo=
-github.com/projectdiscovery/utils v0.0.39/go.mod h1:rrd8dTBuKEScNMLgs1Xiu8rPCVeR0QTzmRcQ5iM3ymo=
+github.com/projectdiscovery/utils v0.0.40 h1:vChjk6PnSb6+nUaP3/GS8LjbGGlrUpFiZBbeoBa9Sww=
+github.com/projectdiscovery/utils v0.0.40/go.mod h1:rrd8dTBuKEScNMLgs1Xiu8rPCVeR0QTzmRcQ5iM3ymo=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
