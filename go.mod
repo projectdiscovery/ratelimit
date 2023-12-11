@@ -3,7 +3,7 @@ module github.com/projectdiscovery/ratelimit
 go 1.19
 
 require (
-	github.com/projectdiscovery/utils v0.0.66
+	github.com/projectdiscovery/utils v0.0.67
 	github.com/stretchr/testify v1.8.4
 )
 
