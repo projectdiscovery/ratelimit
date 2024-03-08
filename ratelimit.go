@@ -12,7 +12,7 @@ var minusOne = ^uint32(0)
 
 // Limiter allows a burst of request during the defined duration
 type Limiter struct {
-	maxCount uint32
+	maxCount atomic.Uint32
 	count    atomic.Uint32
 	ticker   *time.Ticker
 	tokens   chan struct{}
@@ -26,7 +26,7 @@ func (limiter *Limiter) run(ctx context.Context) {
 	for {
 		if limiter.count.Load() == 0 {
 			<-limiter.ticker.C
-			limiter.count.Store(limiter.maxCount)
+			limiter.count.Store(limiter.maxCount.Load())
 		}
 		select {
 		case <-ctx.Done():
@@ -39,7 +39,7 @@ func (limiter *Limiter) run(ctx context.Context) {
 		case limiter.tokens <- struct{}{}:
 			limiter.count.Add(minusOne)
 		case <-limiter.ticker.C:
-			limiter.count.Store(limiter.maxCount)
+			limiter.count.Store(limiter.maxCount.Load())
 		}
 	}
 }
@@ -56,29 +56,18 @@ func (limiter *Limiter) CanTake() bool {
 
 // GetLimit returns current rate limit per given duration
 func (limiter *Limiter) GetLimit() uint {
-	return uint(limiter.maxCount)
+	return uint(limiter.maxCount.Load())
 }
 
-// TODO: SleepandReset should be able to handle multiple calls without resetting multiple times
-// Which is not possible in this implementation
-// // SleepandReset stops timer removes all tokens and resets with new limit (used for Adaptive Ratelimiting)
-// func (ratelimiter *Limiter) SleepandReset(sleepTime time.Duration, newLimit uint, duration time.Duration) {
-// 	// stop existing Limiter using internalContext
-// 	ratelimiter.cancelFunc()
-// 	// drain any token
-// 	close(ratelimiter.tokens)
-// 	<-ratelimiter.tokens
-// 	// sleep
-// 	time.Sleep(sleepTime)
-// 	//reset and start
-// 	ratelimiter.maxCount = newLimit
-// 	ratelimiter.count = newLimit
-// 	ratelimiter.ticker = time.NewTicker(duration)
-// 	ratelimiter.tokens = make(chan struct{})
-// 	ctx, cancel := context.WithCancel(context.TODO())
-// 	ratelimiter.cancelFunc = cancel
-// 	go ratelimiter.run(ctx)
-// }
+// GetLimit returns current rate limit per given duration
+func (limiter *Limiter) SetLimit(max uint) {
+	limiter.maxCount.Store(uint32(max))
+}
+
+// GetLimit returns current rate limit per given duration
+func (limiter *Limiter) SetDuration(d time.Duration) {
+	limiter.ticker.Reset(d)
+}
 
 // Stop the rate limiter canceling the internal context
 func (limiter *Limiter) Stop() {
@@ -91,8 +80,10 @@ func (limiter *Limiter) Stop() {
 func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
 
+	var maxCount atomic.Uint32
+	maxCount.Store(uint32(max))
 	limiter := &Limiter{
-		maxCount:   uint32(max),
+		maxCount:   maxCount,
 		ticker:     time.NewTicker(duration),
 		tokens:     make(chan struct{}),
 		ctx:        ctx,
@@ -108,8 +99,11 @@ func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 func NewUnlimited(ctx context.Context) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
 
+	var maxCount atomic.Uint32
+	maxCount.Store(math.MaxUint32)
+
 	limiter := &Limiter{
-		maxCount:   math.MaxUint32,
+		maxCount:   maxCount,
 		ticker:     time.NewTicker(time.Millisecond),
 		tokens:     make(chan struct{}),
 		ctx:        ctx,
