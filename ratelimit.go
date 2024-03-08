@@ -80,15 +80,15 @@ func (limiter *Limiter) Stop() {
 func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
 
-	var maxCount atomic.Uint32
+	maxCount := &atomic.Uint32{}
 	maxCount.Store(uint32(max))
 	limiter := &Limiter{
-		maxCount:   maxCount,
 		ticker:     time.NewTicker(duration),
 		tokens:     make(chan struct{}),
 		ctx:        ctx,
 		cancelFunc: cancel,
 	}
+	limiter.maxCount.Store(uint32(max))
 	limiter.count.Store(uint32(max))
 	go limiter.run(internalctx)
 
@@ -98,17 +98,13 @@ func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 // NewUnlimited create a bucket with approximated unlimited tokens
 func NewUnlimited(ctx context.Context) *Limiter {
 	internalctx, cancel := context.WithCancel(context.TODO())
-
-	var maxCount atomic.Uint32
-	maxCount.Store(math.MaxUint32)
-
 	limiter := &Limiter{
-		maxCount:   maxCount,
 		ticker:     time.NewTicker(time.Millisecond),
 		tokens:     make(chan struct{}),
 		ctx:        ctx,
 		cancelFunc: cancel,
 	}
+	limiter.maxCount.Store(math.MaxUint32)
 	limiter.count.Store(math.MaxUint32)
 	go limiter.run(internalctx)
 
