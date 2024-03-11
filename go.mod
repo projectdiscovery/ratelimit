@@ -1,6 +1,6 @@
 module github.com/projectdiscovery/ratelimit
 
-go 1.19
+go 1.21
 
 require (
 	github.com/projectdiscovery/utils v0.0.82
