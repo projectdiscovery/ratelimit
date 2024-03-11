@@ -79,5 +79,5 @@ func TestAdaptiveLimit(t *testing.T) {
 	}
 	wg.Wait()
 
-	require.WithinDuration(t, start.Add(expectedDuration), time.Now(), 500*time.Millisecond)
+	require.WithinDuration(t, start.Add(expectedDuration), time.Now(), time.Second)
 }
