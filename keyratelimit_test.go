@@ -54,3 +54,30 @@ func TestMultiLimiter(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestAdaptiveLimit(t *testing.T) {
+	limiter := ratelimit.New(context.TODO(), 1, time.Second)
+	require.NotNil(t, limiter)
+	start := time.Now()
+	expectedDuration := (time.Duration(3) * time.Second).Round(time.Millisecond)
+
+	go func() {
+		time.Sleep(2 * time.Second)
+
+		limiter.SetLimit(100)
+	}()
+
+	wg := &sync.WaitGroup{}
+
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			limiter.Take()
+		}()
+	}
+	wg.Wait()
+
+	require.WithinDuration(t, start.Add(expectedDuration), time.Now(), 500*time.Millisecond)
+}
