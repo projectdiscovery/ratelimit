@@ -95,4 +95,17 @@ func TestRateLimit(t *testing.T) {
 		limiter.Take()
 		require.False(t, limiter.CanTake())
 	})
+
+	t.Run("LeakyBucket", func(t *testing.T) {
+		limiter := NewLeakyBucket(context.TODO(), 1, time.Second)
+
+		start := time.Now()
+		limiter.Take() // 0
+		limiter.Take() // 1s
+		limiter.Take() // 2s
+		limiter.Take() // 3s
+		took := time.Since(start)
+		expected := 3 * time.Second
+		require.True(t, took >= expected)
+	})
 }
