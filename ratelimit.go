@@ -55,7 +55,7 @@ func (limiter *Limiter) run(ctx context.Context) {
 func (limiter *Limiter) Take() {
 	switch limiter.strategy {
 	case LeakyBucket:
-		limiter.leakyBucketLimiter.Wait(context.TODO())
+		_ = limiter.leakyBucketLimiter.Wait(context.TODO())
 	default:
 		<-limiter.tokens
 	}
