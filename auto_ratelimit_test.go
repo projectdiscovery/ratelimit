@@ -80,7 +80,7 @@ func TestAutoLimiterTake(t *testing.T) {
 	// Test taking when limit is reached - this should block, so we test with a timeout
 	done := make(chan bool)
 	go func() {
-		limiter.Take("key1") // This should block
+		_ = limiter.Take("key1") // This should block
 		done <- true
 	}()
 
@@ -93,7 +93,7 @@ func TestAutoLimiterTake(t *testing.T) {
 	}
 
 	// Test taking from unlimited key
-	limiter.Add("unlimited", WithUnlimited())
+	_ = limiter.Add("unlimited", WithUnlimited())
 	for i := 0; i < 100; i++ {
 		err = limiter.Take("unlimited")
 		require.NoError(t, err)
