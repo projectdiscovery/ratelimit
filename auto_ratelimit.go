@@ -143,43 +143,6 @@ func (e *AutoLimiter) Take(key string) error {
 	return nil
 }
 
-// CanTake checks if the rate limiter with the given key has any token
-func (e *AutoLimiter) CanTake(key string) bool {
-	limiter, err := e.get(key)
-	if err != nil {
-		// Key doesn't exist, create it with default settings
-		limiter = e.createOrDefault(key)
-	}
-	return limiter.CanTake()
-}
-
-// Allow checks if a request is allowed - creates limiter automatically if it doesn't exist
-func (e *AutoLimiter) Allow(key string) bool {
-	limiter, err := e.get(key)
-	if err != nil {
-		// Key doesn't exist, create it with default settings
-		limiter = e.createOrDefault(key)
-	}
-	return limiter.CanTake()
-}
-
-// AllowN checks if N requests are allowed - creates limiter automatically if it doesn't exist
-func (e *AutoLimiter) AllowN(key string, n int) bool {
-	limiter, err := e.get(key)
-	if err != nil {
-		// Key doesn't exist, create it with default settings
-		limiter = e.createOrDefault(key)
-	}
-
-	// Check if we can take N tokens
-	for i := 0; i < n; i++ {
-		if !limiter.CanTake() {
-			return false
-		}
-	}
-	return true
-}
-
 // Stop internal limiters with defined keys or all if no key is provided
 func (e *AutoLimiter) Stop(keys ...string) {
 	if len(keys) == 0 {
