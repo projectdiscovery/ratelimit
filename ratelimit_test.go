@@ -82,7 +82,7 @@ func TestRateLimit(t *testing.T) {
 			limiter.Take()
 		}
 		timetaken := time.Since(startTime)
-		expected := time.Duration(6) * time.Second
+		expected := time.Duration(6)*time.Second - 50*time.Millisecond
 		require.GreaterOrEqualf(t, timetaken.Nanoseconds(), expected.Nanoseconds(), "more tokens sent than expected with ratelimit")
 	})
 

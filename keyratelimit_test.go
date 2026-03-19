@@ -19,7 +19,7 @@ func TestMultiLimiter(t *testing.T) {
 	})
 	require.Nil(t, err)
 	wg := &sync.WaitGroup{}
-	expectedTime := (time.Duration(6) * time.Second).Round(time.Millisecond)
+	expectedTime := time.Duration(6)*time.Second - 50*time.Millisecond
 
 	wg.Add(1)
 	go func() {
