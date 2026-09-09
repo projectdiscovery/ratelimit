@@ -15,6 +15,20 @@ The original library i.e `golang.org/x/time/rate` implements classic **token buc
 
 This allows scanners to respect maximum defined rate limits, pause until the allowed interval hits, and then process again at maximum speed. The original library slowed down requests according to the refill ratio.
 
+## Unlimited mode
+
+`NewUnlimited(ctx)` permits requests immediately without a ticker, token channel,
+or background goroutine. `CanTake` returns true and `GetLimit` initially returns
+`math.MaxUint32`. `MultiLimiter` and `AutoLimiter` use this behavior for unlimited keys.
+
+For compatibility, calling `SetLimit` or `SetDuration` creates a finite burst bucket.
+The initial burst is `math.MaxUint32`; a changed limit applies at the next refill.
+The default refill interval is 1 ms. The refill schedule starts when the first
+setter is called. `SetDuration` requires a positive duration.
+
+`Stop` prevents later setters from starting a bucket. Requests remain nonblocking
+when an unconfigured unlimited limiter is stopped or its context is canceled.
+
 ## Example
 
 An Example showing usage of ratelimit as a library is specified below:
