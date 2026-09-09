@@ -237,7 +237,7 @@ func NewUnlimited(ctx context.Context) *Limiter {
 	return limiter
 }
 
-// NewUnlimited create a bucket with approximated unlimited tokens
+// NewLeakyBucket creates a limiter that uses golang.org/x/time/rate.
 func NewLeakyBucket(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	limiter := &Limiter{
 		strategy:           LeakyBucket,
