@@ -93,7 +93,10 @@ func TestRateLimit(t *testing.T) {
 		limiter.Take()
 		limiter.Take()
 		limiter.Take()
-		require.False(t, limiter.CanTake())
+		// The token producer decrements its atomic count immediately after the
+		// unbuffered handoff. Under the race detector the receiver can resume in
+		// that tiny window, so wait for the producer-side accounting to settle.
+		require.Eventually(t, func() bool { return !limiter.CanTake() }, time.Second, time.Millisecond)
 	})
 
 	t.Run("LeakyBucket", func(t *testing.T) {
