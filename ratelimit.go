@@ -22,7 +22,8 @@ import (
 // once tools push tens of thousands of Take calls per second across many
 // workers, so it has been removed.
 type Limiter struct {
-	strategy Strategy
+	unlimited *unlimitedLimiter
+	strategy  Strategy
 
 	// maxCount is the number of tokens granted per interval. It is atomic so
 	// GetLimit/SetLimit stay lock-free.
@@ -44,8 +45,42 @@ type Limiter struct {
 	leakyBucketLimiter *rate.Limiter
 }
 
+// unlimitedLimiter creates a finite bucket only when a caller changes its settings.
+// Its mutex protects initialization and Stop; Take never holds it while waiting.
+type unlimitedLimiter struct {
+	mu      sync.Mutex
+	finite  *Limiter
+	stopped bool
+}
+
+func (u *unlimitedLimiter) bucket() *Limiter {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	return u.finite
+}
+
+// Called with unlimited.mu held. Preserve the initial burst until the first refill.
+func (limiter *Limiter) initUnlimitedBucket() *Limiter {
+	u := limiter.unlimited
+	if u.finite == nil && !u.stopped {
+		u.finite = New(limiter.ctx, math.MaxUint32, limiter.interval)
+		u.finite.SetLimit(limiter.GetLimit())
+	}
+
+	return u.finite
+}
+
 // Take one token from the bucket
 func (limiter *Limiter) Take() {
+	if limiter.unlimited != nil {
+		if finite := limiter.unlimited.bucket(); finite != nil {
+			finite.Take()
+		}
+
+		return
+	}
+
 	if limiter.strategy == LeakyBucket {
 		_ = limiter.leakyBucketLimiter.Wait(context.TODO())
 		return
@@ -98,6 +133,14 @@ func (limiter *Limiter) Take() {
 
 // CanTake checks if the rate limiter has any token
 func (limiter *Limiter) CanTake() bool {
+	if limiter.unlimited != nil {
+		if finite := limiter.unlimited.bucket(); finite != nil {
+			return finite.CanTake()
+		}
+
+		return true
+	}
+
 	if limiter.strategy == LeakyBucket {
 		return limiter.leakyBucketLimiter.Tokens() > 0
 	}
@@ -115,16 +158,48 @@ func (limiter *Limiter) GetLimit() uint {
 	return uint(limiter.maxCount.Load())
 }
 
-// SetLimit sets the current rate limit per given duration
+// SetLimit changes the rate limit. Burst buckets apply it at the next refill.
+// On an unlimited limiter, it starts a finite bucket with a 1 ms interval unless
+// SetDuration has already changed the interval.
 func (limiter *Limiter) SetLimit(max uint) {
+	if limiter.unlimited != nil {
+		limiter.unlimited.mu.Lock()
+		defer limiter.unlimited.mu.Unlock()
+
+		limiter.maxCount.Store(uint32(max))
+
+		if finite := limiter.initUnlimitedBucket(); finite != nil {
+			finite.SetLimit(max)
+		}
+
+		return
+	}
+
 	limiter.maxCount.Store(uint32(max))
 	if limiter.strategy == LeakyBucket {
 		limiter.leakyBucketLimiter.SetBurst(int(max))
 	}
 }
 
-// SetDuration sets the current rate limit duration
+// SetDuration changes the refill interval. For burst buckets, it panics if d is not positive.
+// On an unlimited limiter, it starts a finite bucket using the current limit.
 func (limiter *Limiter) SetDuration(d time.Duration) {
+	if limiter.unlimited != nil {
+		limiter.unlimited.mu.Lock()
+		defer limiter.unlimited.mu.Unlock()
+
+		if d <= 0 {
+			panic("non-positive interval for Ticker.Reset")
+		}
+		limiter.interval = d
+
+		if finite := limiter.initUnlimitedBucket(); finite != nil {
+			finite.SetDuration(d)
+		}
+
+		return
+	}
+
 	if limiter.strategy == LeakyBucket {
 		limiter.interval = d
 		limiter.leakyBucketLimiter.SetLimit(rate.Every(d))
@@ -132,13 +207,24 @@ func (limiter *Limiter) SetDuration(d time.Duration) {
 	}
 	limiter.mu.Lock()
 	limiter.interval = d
-	// recompute the window boundary against the new duration on the next take
-	limiter.next = time.Time{}
+	limiter.next = time.Now().Add(d)
 	limiter.mu.Unlock()
 }
 
 // Stop the rate limiter releasing any waiter blocked in Take
 func (limiter *Limiter) Stop() {
+	if limiter.unlimited != nil {
+		limiter.unlimited.mu.Lock()
+		defer limiter.unlimited.mu.Unlock()
+
+		limiter.unlimited.stopped = true
+		if limiter.unlimited.finite != nil {
+			limiter.unlimited.finite.Stop()
+		}
+
+		return
+	}
+
 	if limiter.strategy == LeakyBucket {
 		return
 	}
@@ -157,31 +243,38 @@ func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 		ctx:      ctx,
 		done:     make(chan struct{}),
 	}
+
 	limiter.maxCount.Store(uint32(max))
 	limiter.count = uint32(max)
+	limiter.next = time.Now().Add(duration)
 	return limiter
 }
 
-// NewUnlimited create a bucket with approximated unlimited tokens
+// NewUnlimited creates a limiter whose Take never waits and CanTake returns true
+// until SetLimit or SetDuration is called.
+// It creates no timer, token channel, or background goroutine until SetLimit or
+// SetDuration configures a finite bucket. GetLimit initially returns math.MaxUint32.
 func NewUnlimited(ctx context.Context) *Limiter {
 	limiter := &Limiter{
-		strategy: None,
-		interval: time.Millisecond,
-		ctx:      ctx,
-		done:     make(chan struct{}),
+		unlimited: &unlimitedLimiter{},
+		ctx:       ctx,
+		interval:  time.Millisecond,
 	}
+
 	limiter.maxCount.Store(math.MaxUint32)
-	limiter.count = math.MaxUint32
+
 	return limiter
 }
 
-// NewLeakyBucket create a bucket with a smooth (leaky bucket) token rate
+// NewLeakyBucket creates a limiter that uses golang.org/x/time/rate.
 func NewLeakyBucket(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	limiter := &Limiter{
 		strategy:           LeakyBucket,
 		leakyBucketLimiter: rate.NewLimiter(rate.Every(duration), int(max)),
 	}
+
 	limiter.maxCount.Store(uint32(max))
 	limiter.interval = duration
+
 	return limiter
 }
