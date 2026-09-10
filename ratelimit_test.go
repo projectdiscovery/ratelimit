@@ -108,4 +108,33 @@ func TestRateLimit(t *testing.T) {
 		expected := 3 * time.Second
 		require.True(t, took >= expected)
 	})
+
+	t.Run("LeakyBucket applies max per duration", func(t *testing.T) {
+		limiter := NewLeakyBucket(context.Background(), 50, time.Second)
+		require.InDelta(t, 50, float64(limiter.leakyBucketLimiter.Limit()), 0.001)
+
+		limiter.SetLimit(25)
+		require.InDelta(t, 25, float64(limiter.leakyBucketLimiter.Limit()), 0.001)
+		limiter.SetDuration(500 * time.Millisecond)
+		require.InDelta(t, 50, float64(limiter.leakyBucketLimiter.Limit()), 0.001)
+	})
+
+	t.Run("LeakyBucket observes cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		limiter := NewLeakyBucket(ctx, 1, time.Hour)
+		limiter.Take()
+
+		done := make(chan struct{})
+		go func() {
+			limiter.Take()
+			close(done)
+		}()
+		cancel()
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Take remained blocked after limiter context cancellation")
+		}
+	})
 }
