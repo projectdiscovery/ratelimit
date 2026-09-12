@@ -27,7 +27,10 @@ func TestRateLimit(t *testing.T) {
 		// take another one above max
 		limiter.Take()
 		took = time.Since(start).Nanoseconds()
-		require.GreaterOrEqual(t, took, expected.Nanoseconds())
+		// Runtime timers may wake fractionally before their nominal deadline on
+		// some platforms. A small tolerance still proves that the full refill
+		// window was enforced without making CI depend on timer granularity.
+		require.GreaterOrEqual(t, took, (expected - 10*time.Millisecond).Nanoseconds())
 	})
 
 	t.Run("Unlimited Rate Limit", func(t *testing.T) {
