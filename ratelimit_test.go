@@ -143,4 +143,22 @@ func TestRateLimit(t *testing.T) {
 			t.Fatal("Take remained blocked after limiter context cancellation")
 		}
 	})
+
+	t.Run("LeakyBucket stop unblocks waiters", func(t *testing.T) {
+		limiter := NewLeakyBucket(context.Background(), 1, time.Hour)
+		limiter.Take()
+
+		done := make(chan struct{})
+		go func() {
+			limiter.Take()
+			close(done)
+		}()
+		limiter.Stop()
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Take remained blocked after limiter stop")
+		}
+	})
 }

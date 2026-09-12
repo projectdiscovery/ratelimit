@@ -191,7 +191,10 @@ func (limiter *Limiter) Stop() {
 	}
 
 	switch limiter.strategy {
-	case LeakyBucket: // NOP
+	case LeakyBucket:
+		if limiter.cancelFunc != nil {
+			limiter.cancelFunc()
+		}
 	default:
 		if limiter.cancelFunc != nil {
 			limiter.cancelFunc()
@@ -240,10 +243,12 @@ func NewUnlimited(ctx context.Context) *Limiter {
 
 // NewLeakyBucket creates a limiter that uses golang.org/x/time/rate.
 func NewLeakyBucket(ctx context.Context, max uint, duration time.Duration) *Limiter {
+	internalctx, cancel := context.WithCancel(ctx)
 	limiter := &Limiter{
 		strategy:           LeakyBucket,
 		leakyBucketLimiter: rate.NewLimiter(leakyBucketRate(max, duration), int(max)),
-		ctx:                ctx,
+		ctx:                internalctx,
+		cancelFunc:         cancel,
 	}
 
 	limiter.maxCount.Store(uint32(max))
