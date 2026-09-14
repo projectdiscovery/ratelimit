@@ -187,7 +187,10 @@ func TestAutoLimiterCreateOrDefault(t *testing.T) {
 		require.True(t, recreated.CanTake())
 		recreated.Take()
 	}
-	require.False(t, recreated.CanTake())
+	// Take returns at the unbuffered handoff; the producer decrements its
+	// accounting immediately afterwards. Wait for that scheduler-sized window
+	// instead of making the test depend on goroutine ordering.
+	require.Eventually(t, func() bool { return !recreated.CanTake() }, time.Second, time.Millisecond)
 }
 
 func TestAutoLimiterAddAndTake(t *testing.T) {
