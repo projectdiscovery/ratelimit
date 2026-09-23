@@ -38,8 +38,9 @@ type Limiter struct {
 
 	ctx context.Context
 	// done is closed by Stop to release any waiter blocked in Take.
-	done     chan struct{}
-	stopOnce sync.Once
+	done       chan struct{}
+	stopOnce   sync.Once
+	cancelFunc context.CancelFunc
 
 	// wraps uber's leaky bucket limiter sizing it to the desired tokens per duration
 	leakyBucketLimiter *rate.Limiter
@@ -82,7 +83,7 @@ func (limiter *Limiter) Take() {
 	}
 
 	if limiter.strategy == LeakyBucket {
-		_ = limiter.leakyBucketLimiter.Wait(context.TODO())
+		_ = limiter.leakyBucketLimiter.Wait(limiter.ctx)
 		return
 	}
 
@@ -177,6 +178,7 @@ func (limiter *Limiter) SetLimit(max uint) {
 
 	limiter.maxCount.Store(uint32(max))
 	if limiter.strategy == LeakyBucket {
+		limiter.leakyBucketLimiter.SetLimit(leakyBucketRate(max, limiter.interval))
 		limiter.leakyBucketLimiter.SetBurst(int(max))
 	}
 }
@@ -202,7 +204,7 @@ func (limiter *Limiter) SetDuration(d time.Duration) {
 
 	if limiter.strategy == LeakyBucket {
 		limiter.interval = d
-		limiter.leakyBucketLimiter.SetLimit(rate.Every(d))
+		limiter.leakyBucketLimiter.SetLimit(leakyBucketRate(limiter.GetLimit(), d))
 		return
 	}
 	limiter.mu.Lock()
@@ -226,6 +228,9 @@ func (limiter *Limiter) Stop() {
 	}
 
 	if limiter.strategy == LeakyBucket {
+		if limiter.cancelFunc != nil {
+			limiter.cancelFunc()
+		}
 		return
 	}
 	limiter.stopOnce.Do(func() {
@@ -268,13 +273,23 @@ func NewUnlimited(ctx context.Context) *Limiter {
 
 // NewLeakyBucket creates a limiter that uses golang.org/x/time/rate.
 func NewLeakyBucket(ctx context.Context, max uint, duration time.Duration) *Limiter {
+	internalctx, cancel := context.WithCancel(ctx)
 	limiter := &Limiter{
 		strategy:           LeakyBucket,
-		leakyBucketLimiter: rate.NewLimiter(rate.Every(duration), int(max)),
+		leakyBucketLimiter: rate.NewLimiter(leakyBucketRate(max, duration), int(max)),
+		ctx:                internalctx,
+		cancelFunc:         cancel,
 	}
 
 	limiter.maxCount.Store(uint32(max))
 	limiter.interval = duration
 
 	return limiter
+}
+
+func leakyBucketRate(max uint, duration time.Duration) rate.Limit {
+	if duration <= 0 {
+		return rate.Inf
+	}
+	return rate.Limit(float64(max) / duration.Seconds())
 }

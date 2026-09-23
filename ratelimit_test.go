@@ -27,7 +27,10 @@ func TestRateLimit(t *testing.T) {
 		// take another one above max
 		limiter.Take()
 		took = time.Since(start).Nanoseconds()
-		require.GreaterOrEqual(t, took, expected.Nanoseconds())
+		// Runtime timers may wake fractionally before their nominal deadline on
+		// some platforms. A small tolerance still proves that the full refill
+		// window was enforced without making CI depend on timer granularity.
+		require.GreaterOrEqual(t, took, (expected - 10*time.Millisecond).Nanoseconds())
 	})
 
 	t.Run("Unlimited Rate Limit", func(t *testing.T) {
@@ -93,7 +96,10 @@ func TestRateLimit(t *testing.T) {
 		limiter.Take()
 		limiter.Take()
 		limiter.Take()
-		require.False(t, limiter.CanTake())
+		// The token producer decrements its atomic count immediately after the
+		// unbuffered handoff. Under the race detector the receiver can resume in
+		// that tiny window, so wait for the producer-side accounting to settle.
+		require.Eventually(t, func() bool { return !limiter.CanTake() }, time.Second, time.Millisecond)
 	})
 
 	t.Run("LeakyBucket", func(t *testing.T) {
@@ -107,5 +113,52 @@ func TestRateLimit(t *testing.T) {
 		took := time.Since(start)
 		expected := 3 * time.Second
 		require.True(t, took >= expected)
+	})
+
+	t.Run("LeakyBucket applies max per duration", func(t *testing.T) {
+		limiter := NewLeakyBucket(context.Background(), 50, time.Second)
+		require.InDelta(t, 50, float64(limiter.leakyBucketLimiter.Limit()), 0.001)
+
+		limiter.SetLimit(25)
+		require.InDelta(t, 25, float64(limiter.leakyBucketLimiter.Limit()), 0.001)
+		limiter.SetDuration(500 * time.Millisecond)
+		require.InDelta(t, 50, float64(limiter.leakyBucketLimiter.Limit()), 0.001)
+	})
+
+	t.Run("LeakyBucket observes cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		limiter := NewLeakyBucket(ctx, 1, time.Hour)
+		limiter.Take()
+
+		done := make(chan struct{})
+		go func() {
+			limiter.Take()
+			close(done)
+		}()
+		cancel()
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Take remained blocked after limiter context cancellation")
+		}
+	})
+
+	t.Run("LeakyBucket stop unblocks waiters", func(t *testing.T) {
+		limiter := NewLeakyBucket(context.Background(), 1, time.Hour)
+		limiter.Take()
+
+		done := make(chan struct{})
+		go func() {
+			limiter.Take()
+			close(done)
+		}()
+		limiter.Stop()
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Take remained blocked after limiter stop")
+		}
 	})
 }
