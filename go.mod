@@ -1,9 +1,9 @@
 module github.com/projectdiscovery/ratelimit
 
-go 1.25.0
+go 1.26.0
 
 require (
-	github.com/projectdiscovery/utils v0.11.5
+	github.com/projectdiscovery/utils v0.11.6
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/time v0.5.0
 )
