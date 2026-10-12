@@ -162,3 +162,29 @@ func TestRateLimit(t *testing.T) {
 		}
 	})
 }
+
+func TestTakeContextCancellation(t *testing.T) {
+	limiter := New(context.Background(), 1, time.Second)
+	t.Cleanup(limiter.Stop)
+	limiter.Take()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	started := time.Now()
+	require.ErrorIs(t, limiter.TakeContext(ctx), context.Canceled)
+	require.Less(t, time.Since(started), 100*time.Millisecond)
+}
+
+func TestLeakyBucketTakeContextCancellation(t *testing.T) {
+	limiter := NewLeakyBucket(context.Background(), 1, time.Second)
+	t.Cleanup(limiter.Stop)
+	limiter.Take()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	started := time.Now()
+	require.ErrorIs(t, limiter.TakeContext(ctx), context.Canceled)
+	require.Less(t, time.Since(started), 100*time.Millisecond)
+}

@@ -80,21 +80,52 @@ func (limiter *Limiter) run(ctx context.Context) {
 	}
 }
 
-// Take one token from the bucket
+// Take one token from the bucket.
 func (limiter *Limiter) Take() {
+	_ = limiter.TakeContext(context.Background())
+}
+
+// TakeContext takes one token from the bucket or returns when ctx is canceled.
+func (limiter *Limiter) TakeContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return context.Cause(ctx)
+	}
 	if limiter.unlimited != nil {
 		if finite := limiter.unlimited.bucket(); finite != nil {
-			finite.Take()
+			return finite.TakeContext(ctx)
 		}
 
-		return
+		return nil
 	}
 
 	switch limiter.strategy {
 	case LeakyBucket:
-		_ = limiter.leakyBucketLimiter.Wait(limiter.ctx)
+		waitCtx, cancel := context.WithCancel(ctx)
+		stopWait := context.AfterFunc(limiter.ctx, cancel)
+		defer func() {
+			stopWait()
+			cancel()
+		}()
+		if err := limiter.leakyBucketLimiter.Wait(waitCtx); err != nil {
+			if ctx.Err() != nil {
+				return context.Cause(ctx)
+			}
+			if limiter.ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		return nil
 	default:
-		<-limiter.tokens
+		select {
+		case <-limiter.tokens:
+			return nil
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		}
 	}
 }
 
