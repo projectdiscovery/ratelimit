@@ -164,27 +164,35 @@ func TestRateLimit(t *testing.T) {
 }
 
 func TestTakeContextCancellation(t *testing.T) {
-	limiter := New(context.Background(), 1, time.Second)
+	limiter := New(context.Background(), 1, time.Hour)
 	t.Cleanup(limiter.Stop)
 	limiter.Take()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- limiter.TakeContext(ctx) }()
+	select {
+	case err := <-result:
+		t.Fatalf("TakeContext returned before cancellation: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
 	cancel()
-
-	started := time.Now()
-	require.ErrorIs(t, limiter.TakeContext(ctx), context.Canceled)
-	require.Less(t, time.Since(started), 100*time.Millisecond)
+	require.ErrorIs(t, <-result, context.Canceled)
 }
 
 func TestLeakyBucketTakeContextCancellation(t *testing.T) {
-	limiter := NewLeakyBucket(context.Background(), 1, time.Second)
+	limiter := NewLeakyBucket(context.Background(), 1, time.Hour)
 	t.Cleanup(limiter.Stop)
 	limiter.Take()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- limiter.TakeContext(ctx) }()
+	select {
+	case err := <-result:
+		t.Fatalf("TakeContext returned before cancellation: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
 	cancel()
-
-	started := time.Now()
-	require.ErrorIs(t, limiter.TakeContext(ctx), context.Canceled)
-	require.Less(t, time.Since(started), 100*time.Millisecond)
+	require.ErrorIs(t, <-result, context.Canceled)
 }
