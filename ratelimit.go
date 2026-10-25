@@ -72,19 +72,44 @@ func (limiter *Limiter) initUnlimitedBucket() *Limiter {
 	return u.finite
 }
 
-// Take one token from the bucket
+// Take one token from the bucket.
 func (limiter *Limiter) Take() {
+	_ = limiter.TakeContext(context.Background())
+}
+
+// TakeContext takes one token from the bucket or returns when ctx is canceled.
+func (limiter *Limiter) TakeContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return context.Cause(ctx)
+	}
 	if limiter.unlimited != nil {
 		if finite := limiter.unlimited.bucket(); finite != nil {
-			finite.Take()
+			return finite.TakeContext(ctx)
 		}
 
-		return
+		return nil
 	}
 
 	if limiter.strategy == LeakyBucket {
-		_ = limiter.leakyBucketLimiter.Wait(limiter.ctx)
-		return
+		waitCtx, cancel := context.WithCancel(ctx)
+		stopWait := context.AfterFunc(limiter.ctx, cancel)
+		defer func() {
+			stopWait()
+			cancel()
+		}()
+		if err := limiter.leakyBucketLimiter.Wait(waitCtx); err != nil {
+			if ctx.Err() != nil {
+				return context.Cause(ctx)
+			}
+			if limiter.ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		return nil
 	}
 
 	for {
@@ -107,7 +132,7 @@ func (limiter *Limiter) Take() {
 		if limiter.count > 0 {
 			limiter.count--
 			limiter.mu.Unlock()
-			return
+			return nil
 		}
 		wait := time.Until(limiter.next)
 		limiter.mu.Unlock()
@@ -116,18 +141,21 @@ func (limiter *Limiter) Take() {
 			continue
 		}
 		timer := time.NewTimer(wait)
-		var ctxDone <-chan struct{}
+		var limiterDone <-chan struct{}
 		if limiter.ctx != nil {
-			ctxDone = limiter.ctx.Done()
+			limiterDone = limiter.ctx.Done()
 		}
 		select {
 		case <-timer.C:
-		case <-ctxDone:
+		case <-ctx.Done():
 			timer.Stop()
-			return
+			return context.Cause(ctx)
+		case <-limiterDone:
+			timer.Stop()
+			return nil
 		case <-limiter.done:
 			timer.Stop()
-			return
+			return nil
 		}
 	}
 }
