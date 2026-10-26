@@ -29,6 +29,10 @@ setter is called. `SetDuration` requires a positive duration.
 `Stop` prevents later setters from starting a bucket. Requests remain nonblocking
 when an unconfigured unlimited limiter is stopped or its context is canceled.
 
+## Zero limit
+
+A limit of 0 means unlimited. `New(ctx, 0, d)` and `NewLeakyBucket(ctx, 0, d)` never block: `Take` returns at once and `CanTake` returns true, as with `NewUnlimited`. `GetLimit` still reports 0. `SetLimit(0)` lifts the limit at runtime, and a later non-zero `SetLimit` applies it again. This lets callers pass an unset option such as `uint(opts.RateLimit)` straight to `New`.
+
 ## Example
 
 An Example showing usage of ratelimit as a library is specified below:

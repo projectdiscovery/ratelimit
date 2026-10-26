@@ -22,12 +22,6 @@ func BenchmarkUnlimitedIdle(b *testing.B) {
 				for _, limiter := range limiters {
 					limiter.Stop()
 				}
-				for _, limiter := range limiters {
-					if limiter.tokens != nil {
-						for range limiter.tokens {
-						}
-					}
-				}
 			}()
 			workers := runtime.NumGoroutine() - before
 			cpuTime := func() time.Duration {
