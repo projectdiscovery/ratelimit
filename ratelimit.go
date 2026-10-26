@@ -235,6 +235,9 @@ func (limiter *Limiter) SetDuration(d time.Duration) {
 		limiter.leakyBucketLimiter.SetLimit(leakyBucketRate(limiter.GetLimit(), d))
 		return
 	}
+	if d <= 0 {
+		panic("non-positive interval for Ticker.Reset")
+	}
 	limiter.mu.Lock()
 	limiter.interval = d
 	limiter.next = time.Now().Add(d)
@@ -268,8 +271,12 @@ func (limiter *Limiter) Stop() {
 	})
 }
 
-// New creates a new limiter instance with the tokens amount and the interval
+// New creates a new limiter instance with the tokens amount and the interval.
+// It panics if duration is not positive.
 func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
+	if duration <= 0 {
+		panic("non-positive interval for NewTicker")
+	}
 	limiter := &Limiter{
 		strategy: None,
 		interval: duration,

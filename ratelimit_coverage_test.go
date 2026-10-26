@@ -89,3 +89,12 @@ func TestLeakyBucketSetters(t *testing.T) {
 	l.SetDuration(2 * time.Second)
 	l.Stop() // must be a safe no-op for LeakyBucket
 }
+
+// TestNonPositiveDurationPanics keeps the ticker contract: a zero or negative
+// window would make a zero-rate Take spin without ever checking its context.
+func TestNonPositiveDurationPanics(t *testing.T) {
+	require.Panics(t, func() { New(context.Background(), 0, 0) })
+	require.Panics(t, func() { New(context.Background(), 1, -time.Second) })
+	l := New(context.Background(), 1, time.Second)
+	require.Panics(t, func() { l.SetDuration(0) })
+}
