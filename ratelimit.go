@@ -92,6 +92,10 @@ func (limiter *Limiter) TakeContext(ctx context.Context) error {
 
 		return nil
 	}
+	// A limit of 0 means unlimited, as with NewUnlimited.
+	if limiter.maxCount.Load() == 0 {
+		return nil
+	}
 
 	if limiter.strategy == LeakyBucket {
 		waitCtx, cancel := context.WithCancel(ctx)
@@ -169,6 +173,9 @@ func (limiter *Limiter) CanTake() bool {
 
 		return true
 	}
+	if limiter.maxCount.Load() == 0 {
+		return true
+	}
 
 	if limiter.strategy == LeakyBucket {
 		return limiter.leakyBucketLimiter.Tokens() > 0
@@ -188,6 +195,7 @@ func (limiter *Limiter) GetLimit() uint {
 }
 
 // SetLimit changes the rate limit. Burst buckets apply it at the next refill.
+// A limit of 0 means unlimited: Take never waits until a non-zero limit is set.
 // On an unlimited limiter, it starts a finite bucket with a 1 ms interval unless
 // SetDuration has already changed the interval.
 func (limiter *Limiter) SetLimit(max uint) {
@@ -272,7 +280,9 @@ func (limiter *Limiter) Stop() {
 }
 
 // New creates a new limiter instance with the tokens amount and the interval.
-// It panics if duration is not positive.
+// It panics if duration is not positive. A max of 0 means unlimited: Take never
+// waits and CanTake returns true, as with NewUnlimited, until SetLimit sets a
+// non-zero limit. GetLimit still reports 0.
 func New(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	if duration <= 0 {
 		panic("non-positive interval for NewTicker")
@@ -306,7 +316,8 @@ func NewUnlimited(ctx context.Context) *Limiter {
 	return limiter
 }
 
-// NewLeakyBucket creates a limiter that uses golang.org/x/time/rate.
+// NewLeakyBucket creates a limiter that uses golang.org/x/time/rate. A max of 0
+// means unlimited, as with New.
 func NewLeakyBucket(ctx context.Context, max uint, duration time.Duration) *Limiter {
 	internalctx, cancel := context.WithCancel(ctx)
 	limiter := &Limiter{

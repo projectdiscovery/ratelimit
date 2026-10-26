@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -97,4 +98,58 @@ func TestNonPositiveDurationPanics(t *testing.T) {
 	require.Panics(t, func() { New(context.Background(), 1, -time.Second) })
 	l := New(context.Background(), 1, time.Second)
 	require.Panics(t, func() { l.SetDuration(0) })
+}
+
+// TestZeroMaxIsUnlimited guards callers that pass a zero limit straight from
+// options (for example New(ctx, uint(opts.RateLimit), time.Second) with
+// RateLimit unset): Take must never block, as with NewUnlimited.
+func TestZeroMaxIsUnlimited(t *testing.T) {
+	ctx := context.Background()
+	for name, l := range map[string]*Limiter{
+		"fixed-window": New(ctx, 0, time.Hour),
+		"leaky-bucket": NewLeakyBucket(ctx, 0, time.Hour),
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer l.Stop()
+			require.Equal(t, uint(0), l.GetLimit())
+			done := make(chan error, 1)
+			go func() {
+				for i := 0; i < 10000; i++ {
+					if !l.CanTake() {
+						done <- errors.New("CanTake returned false")
+						return
+					}
+					if err := l.TakeContext(ctx); err != nil {
+						done <- err
+						return
+					}
+				}
+				done <- nil
+			}()
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-time.After(2 * time.Second):
+				t.Fatal("Take blocked on a zero limit")
+			}
+		})
+	}
+}
+
+// TestSetLimitZeroIsUnlimited checks that setting the limit to 0 at runtime
+// lifts the limit, and that a later non-zero limit applies again.
+func TestSetLimitZeroIsUnlimited(t *testing.T) {
+	l := New(context.Background(), 1, time.Hour)
+	defer l.Stop()
+	l.Take()
+	require.False(t, l.CanTake())
+
+	l.SetLimit(0)
+	require.True(t, l.CanTake())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, l.TakeContext(ctx))
+
+	l.SetLimit(1)
+	require.False(t, l.CanTake(), "a non-zero limit must apply again")
 }
