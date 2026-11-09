@@ -1,7 +1,7 @@
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
-github.com/projectdiscovery/utils v0.11.12 h1:Ok9rlfsSjJXDSUX99CPHrrEQb1Htk2LdWiMcLWbPXuw=
-github.com/projectdiscovery/utils v0.11.12/go.mod h1:TJgsyVjB02CavwZVFzUzPg6YOSJXQxLhL808JCiQKlU=
+github.com/projectdiscovery/utils v0.11.13 h1:Mn3/rtyQvtn8XZy0UnVkxbAmn0afbHtWuMHUEztwWSw=
+github.com/projectdiscovery/utils v0.11.13/go.mod h1:TJgsyVjB02CavwZVFzUzPg6YOSJXQxLhL808JCiQKlU=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
