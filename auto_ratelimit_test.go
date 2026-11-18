@@ -3,6 +3,8 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -144,6 +146,159 @@ func TestAutoLimiterRemove(t *testing.T) {
 	// Options should also be removed
 	_, exists := limiter.options.Load("key1")
 	require.False(t, exists)
+}
+
+func TestAutoLimiterSetRateKeepsWaitersOnTheBucket(t *testing.T) {
+	const interval = 100 * time.Millisecond
+	limiter := NewAutoLimiter(context.Background(), WithDuration(time.Hour), WithMaxCount(1))
+	t.Cleanup(func() { limiter.Stop() })
+	require.NoError(t, limiter.Add("key", WithDuration(300*time.Millisecond), WithMaxCount(1)))
+	require.NoError(t, limiter.Take("key"))
+
+	type taken struct {
+		at  time.Time
+		err error
+	}
+	const waiters = 5
+	results := make(chan taken, waiters)
+	for range waiters {
+		go func() {
+			err := limiter.TakeContext(context.Background(), "key")
+			results <- taken{time.Now(), err}
+		}()
+	}
+	time.Sleep(20 * time.Millisecond)
+	start := time.Now()
+	require.NoError(t, limiter.SetRate("key", 1, interval))
+
+	var arrivals []time.Duration
+	for range waiters {
+		select {
+		case result := <-results:
+			require.NoError(t, result.err)
+			arrivals = append(arrivals, result.at.Sub(start))
+		case <-time.After(3 * time.Second):
+			t.Fatal("a waiter stayed blocked after SetRate")
+		}
+	}
+	slices.Sort(arrivals)
+	// One token a tick of the new interval; timers may wake fractionally early.
+	for i, at := range arrivals {
+		require.GreaterOrEqualf(t, at, time.Duration(i+1)*interval-10*time.Millisecond, "waiter %d arrived after %v", i+1, at)
+	}
+	require.Lessf(t, arrivals[waiters-1], waiters*300*time.Millisecond, "waiters kept the old rate")
+}
+
+func TestAutoLimiterSetRateCreatesAbsentKey(t *testing.T) {
+	limiter := NewAutoLimiter(context.Background(), WithDuration(time.Hour), WithMaxCount(10))
+	t.Cleanup(func() { limiter.Stop() })
+
+	require.ErrorContains(t, limiter.SetRate("", 2, time.Hour), "empty keys not allowed")
+	require.ErrorContains(t, limiter.SetRate("key", 0, time.Hour), "maxcount cannot be zero")
+	require.ErrorContains(t, limiter.SetRate("key", 2, 0), "time duration not set")
+
+	require.NoError(t, limiter.SetRate("key", 2, time.Hour))
+	requireTakes := func(n int) {
+		t.Helper()
+		for range n {
+			require.NoError(t, limiter.Take("key"))
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		require.ErrorIs(t, limiter.TakeContext(ctx, "key"), context.DeadlineExceeded)
+	}
+	requireTakes(2)
+
+	// Stop keeps a key's options, so the recreated bucket has the rate set.
+	limiter.Stop("key")
+	requireTakes(2)
+}
+
+func TestAutoLimiterSetRateRacingFirstTake(t *testing.T) {
+	limiter := NewAutoLimiter(context.Background(), WithDuration(time.Hour), WithMaxCount(10))
+	t.Cleanup(func() { limiter.Stop() })
+
+	for i := range 200 {
+		key := fmt.Sprint(i)
+		var wg sync.WaitGroup
+		var setErr error
+		wg.Go(func() { _ = limiter.Take(key) })
+		wg.Go(func() { setErr = limiter.SetRate(key, 1, time.Hour) })
+		wg.Wait()
+		require.NoError(t, setErr)
+
+		bucket, err := limiter.get(key)
+		require.NoError(t, err)
+		require.EqualValuesf(t, 1, bucket.GetLimit(), "key %s lost its rate to a bucket a Take built", key)
+	}
+}
+
+func TestAutoLimiterSetRateConcurrently(t *testing.T) {
+	limiter := NewAutoLimiter(context.Background(), WithDuration(time.Hour), WithMaxCount(10))
+	t.Cleanup(func() { limiter.Stop() })
+	require.NoError(t, limiter.Take("key"))
+
+	var wg sync.WaitGroup
+	for i := range 10 {
+		wg.Go(func() { _ = limiter.SetRate("key", uint(i+1), time.Duration(i+1)*time.Second) })
+	}
+	wg.Wait()
+
+	bucket, err := limiter.get("key")
+	require.NoError(t, err)
+	stored, _ := limiter.options.Load("key")
+	options := stored.(*internalOptions)
+	require.Equal(t, options.MaxCount, bucket.GetLimit())
+	require.Equal(t, options.Duration, bucket.interval)
+}
+
+func TestAutoLimiterTakeContextCancellation(t *testing.T) {
+	limiter := NewAutoLimiter(context.Background(), WithDuration(time.Hour), WithMaxCount(1))
+	t.Cleanup(func() { limiter.Stop() })
+	require.NoError(t, limiter.Take("key"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { result <- limiter.TakeContext(ctx, "key") }()
+	select {
+	case err := <-result:
+		t.Fatalf("TakeContext returned before cancellation: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	cancel()
+	require.ErrorIs(t, <-result, context.Canceled)
+}
+
+func TestAutoLimiterRemoveTokensNoWaiter(t *testing.T) {
+	const interval = 50 * time.Millisecond
+	limiter := NewAutoLimiter(context.Background(), WithDuration(time.Hour), WithMaxCount(1))
+	require.NoError(t, limiter.Add("key", WithDuration(interval), WithMaxCount(1)))
+	require.NoError(t, limiter.Take("key"))
+	start := time.Now()
+
+	const waiters = 20
+	results := make(chan error, waiters)
+	for range waiters {
+		go func() { results <- limiter.Take("key") }()
+	}
+	time.Sleep(20 * time.Millisecond)
+	limiter.Remove("key")
+
+	tokened := 0
+	for range waiters {
+		select {
+		case err := <-results:
+			if err == nil {
+				tokened++
+				continue
+			}
+			require.ErrorIs(t, err, ErrLimiterStopped)
+		case <-time.After(2 * time.Second):
+			t.Fatal("a waiter stayed blocked after Remove")
+		}
+	}
+	ticks := int(time.Since(start)/interval) + 1
+	require.LessOrEqualf(t, tokened, ticks, "%d waiters returned nil, but the bucket ticked only %d times", tokened, ticks)
 }
 
 func TestAutoLimiterRecreateLimiter(t *testing.T) {

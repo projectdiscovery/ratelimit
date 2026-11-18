@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -178,6 +179,30 @@ func TestTakeContextCancellation(t *testing.T) {
 	}
 	cancel()
 	require.ErrorIs(t, <-result, context.Canceled)
+}
+
+func TestTakeContextAfterStop(t *testing.T) {
+	limiter := New(context.Background(), 1, 50*time.Millisecond)
+	limiter.Take()
+	limiter.Stop()
+
+	// A stopped bucket may still hand out a token a tick until its worker returns.
+	require.Eventually(t, func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		return errors.Is(limiter.TakeContext(ctx), ErrLimiterStopped)
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func TestLeakyBucketTakeContextAfterStop(t *testing.T) {
+	limiter := NewLeakyBucket(context.Background(), 1, time.Hour)
+	limiter.Take()
+
+	result := make(chan error, 1)
+	go func() { result <- limiter.TakeContext(context.Background()) }()
+	limiter.Stop()
+	require.ErrorIs(t, <-result, ErrLimiterStopped)
+	require.ErrorIs(t, limiter.TakeContext(context.Background()), ErrLimiterStopped)
 }
 
 func TestLeakyBucketTakeContextCancellation(t *testing.T) {
