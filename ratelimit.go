@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,9 @@ import (
 
 // equals to -1
 var minusOne = ^uint32(0)
+
+// ErrLimiterStopped is returned by TakeContext when the limiter stopped before a token was taken.
+var ErrLimiterStopped = errors.New("limiter stopped")
 
 // Limiter allows a burst of request during the defined duration
 type Limiter struct {
@@ -80,12 +84,14 @@ func (limiter *Limiter) run(ctx context.Context) {
 	}
 }
 
-// Take one token from the bucket.
+// Take one token from the bucket. Take also returns once the limiter stops;
+// use TakeContext to tell that return from a token.
 func (limiter *Limiter) Take() {
 	_ = limiter.TakeContext(context.Background())
 }
 
-// TakeContext takes one token from the bucket or returns when ctx is canceled.
+// TakeContext takes one token from the bucket, returns ErrLimiterStopped once the
+// limiter stops, or returns when ctx is canceled.
 func (limiter *Limiter) TakeContext(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -114,14 +120,17 @@ func (limiter *Limiter) TakeContext(ctx context.Context) error {
 				return context.Cause(ctx)
 			}
 			if limiter.ctx.Err() != nil {
-				return nil
+				return ErrLimiterStopped
 			}
 			return err
 		}
 		return nil
 	default:
 		select {
-		case <-limiter.tokens:
+		case _, ok := <-limiter.tokens:
+			if !ok {
+				return ErrLimiterStopped
+			}
 			return nil
 		case <-ctx.Done():
 			return context.Cause(ctx)

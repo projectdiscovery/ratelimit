@@ -41,6 +41,7 @@ type AutoLimiter struct {
 	limiters sync.Map // map of active limiters
 	options  sync.Map // map of custom options (only for keys with custom settings)
 	ctx      context.Context
+	setRate  sync.Mutex // keeps a key's limit and duration from two SetRate calls apart
 
 	// Default options for automatically created limiters
 	defaultOptions *internalOptions
@@ -132,14 +133,41 @@ func (e *AutoLimiter) Add(key string, opts ...AutoLimiterOption) error {
 	return nil
 }
 
-// Take one token from bucket - creates limiter automatically if it doesn't exist
+// Take one token from bucket - creates limiter automatically if it doesn't exist.
+// It returns ErrLimiterStopped if the key's limiter stops while it waits.
 func (e *AutoLimiter) Take(key string) error {
+	return e.TakeContext(context.Background(), key)
+}
+
+// TakeContext takes one token from key's bucket like Take, or returns when ctx is canceled.
+func (e *AutoLimiter) TakeContext(ctx context.Context, key string) error {
 	limiter, err := e.get(key)
 	if err != nil {
 		// Key doesn't exist, create it with default settings
 		limiter = e.createOrDefault(key)
 	}
-	limiter.Take()
+	return limiter.TakeContext(ctx)
+}
+
+// SetRate changes key's rate to maxCount tokens per duration in place, creating the key if absent.
+// Takes already waiting on the key stay on its bucket and receive tokens at the new rate.
+// Like Limiter.SetLimit, the new count applies from the bucket's next refill.
+func (e *AutoLimiter) SetRate(key string, maxCount uint, duration time.Duration) error {
+	options := &internalOptions{Key: key, MaxCount: maxCount, Duration: duration}
+	if err := options.Validate(); err != nil {
+		return err
+	}
+
+	e.setRate.Lock()
+	defer e.setRate.Unlock()
+
+	e.options.Store(key, options)
+	limiter, err := e.get(key)
+	if err != nil {
+		limiter = e.store(key, New(e.ctx, maxCount, duration))
+	}
+	limiter.SetLimit(maxCount)
+	limiter.SetDuration(duration)
 	return nil
 }
 
@@ -210,9 +238,17 @@ func (e *AutoLimiter) recreateLimiter(key string) (*Limiter, error) {
 	}
 
 	// Store the new limiter
-	e.limiters.Store(key, rlimiter)
+	return e.store(key, rlimiter), nil
+}
 
-	return rlimiter, nil
+// store keeps limiter as key's unless a concurrent caller stored one first, which it returns instead.
+func (e *AutoLimiter) store(key string, limiter *Limiter) *Limiter {
+	held, loaded := e.limiters.LoadOrStore(key, limiter)
+	if !loaded {
+		return limiter
+	}
+	limiter.Stop()
+	return held.(*Limiter)
 }
 
 // createOrDefault creates a new limiter with default settings
@@ -236,21 +272,17 @@ func (e *AutoLimiter) createOrDefault(key string) *Limiter {
 		limiter = New(e.ctx, e.defaultOptions.MaxCount, e.defaultOptions.Duration)
 	}
 
-	// Store the limiter
-	e.limiters.Store(key, limiter)
-
 	// Note: We don't store options for default limiters since they can be recreated
-	// Only custom limiters (added via Add()) get their options stored
+	// Only custom limiters (added via Add() or SetRate()) get their options stored
 
-	return limiter
+	return e.store(key, limiter)
 }
 
 // AddAndTake adds a key with custom settings if not present and then takes a token
 func (e *AutoLimiter) AddAndTake(key string, opts ...AutoLimiterOption) error {
 	// Check if limiter already exists
 	if limiter, err := e.get(key); err == nil {
-		limiter.Take()
-		return nil
+		return limiter.TakeContext(context.Background())
 	}
 
 	// Add the key with custom settings
