@@ -16,9 +16,8 @@ func TestUnlimitedNoResources(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		limiter := NewUnlimited(context.Background())
 		defer limiter.Stop()
-		require.Nil(t, limiter.ticker, "unlimited mode must not schedule refills")
-		require.Nil(t, limiter.tokens, "unlimited mode must not exchange tokens")
-		require.Nil(t, limiter.cancelFunc, "unlimited mode must not start a worker")
+		require.NotNil(t, limiter.unlimited, "unlimited mode must use a lazy bucket")
+		require.Nil(t, limiter.unlimited.finite, "unlimited mode must not create a finite bucket yet")
 		require.Equal(t, uint(math.MaxUint32), limiter.GetLimit())
 		for i := 0; i < 1000; i++ {
 			limiter.Take()
@@ -147,9 +146,8 @@ func TestUnlimitedWrappers(t *testing.T) {
 		automatic, err := auto.get("unlimited")
 		require.NoError(t, err)
 		for _, limiter := range []*Limiter{direct, automatic} {
-			require.Nil(t, limiter.ticker)
-			require.Nil(t, limiter.tokens)
-			require.Nil(t, limiter.cancelFunc)
+			require.NotNil(t, limiter.unlimited)
+			require.Nil(t, limiter.unlimited.finite)
 			require.Equal(t, uint(math.MaxUint32), limiter.GetLimit())
 		}
 		auto.Stop()

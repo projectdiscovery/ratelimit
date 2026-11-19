@@ -31,11 +31,6 @@ func BenchmarkUnlimitedLifecycle(b *testing.B) {
 	for b.Loop() {
 		limiter := NewUnlimited(context.Background())
 		limiter.Stop()
-		// Wait for the old implementation to exit so workers do not accumulate.
-		if limiter.tokens != nil {
-			for range limiter.tokens {
-			}
-		}
 	}
 }
 
